@@ -1,8 +1,3 @@
-#remove.packages("devtools")
-#install.packages("devtools")
-# devtools::install_github("karbartolome/shinymatic")
-# devtools::install_version("devtools", version = "2.4.3")
-# devtools::install_github("karbartolome/shinymatic")
 dir.create(Sys.getenv("R_LIBS_USER"), recursive = TRUE)  # create personal library
 .libPaths(Sys.getenv("R_LIBS_USER"))  # add to the path
 devtools::install_github("karbartolome/shinymatic")
@@ -16,9 +11,12 @@ library(recipes)
 library(rsample)
 library(parsnip)
 library(workflows)
+library(gt)
 
 df <- read.csv('https://raw.githubusercontent.com/datasciencedojo/datasets/master/titanic.csv')
+
 titanic_date <- as.Date('1911-05-31')
+
 datos <- df %>% 
   clean_names() %>% 
   mutate(
@@ -29,7 +27,7 @@ datos <- df %>%
     birthdate=titanic_date-age*365+ runif(nrow(.),0,0.99)) %>% 
   select(survived, pclass, fare, sex, birthdate, embarked)
 
-# Modelo ------------------------------------------------------------------
+# Model ------------------------------------------------------------------
 
 preproc <- recipe(survived~., data=datos) %>% 
   step_mutate(age = as.numeric(titanic_date-birthdate)) %>% 
@@ -40,7 +38,7 @@ preproc <- recipe(survived~., data=datos) %>%
   step_other(all_nominal_predictors(), threshold = 0.1) %>% 
   step_dummy(all_nominal_predictors())
 
-preproc %>% prep() %>% juice()
+# preproc %>% prep() %>% juice()
 
 model <- logistic_reg() %>%
   set_engine('glm') %>%
@@ -78,7 +76,8 @@ tab_inferences <- sidebarLayout(
     h4('Predicted class and probability of survival'),
     
     fluidRow(
-      tableOutput(outputId = "data_test"),
+      gt_output(outputId = "data_test"),
+      br(),
       valueBoxOutput("box_inferencia_prob"),
       valueBoxOutput("box_inferencia_clase"),
     )
@@ -87,9 +86,21 @@ tab_inferences <- sidebarLayout(
 )
 
 
+
+dbHeader <- dashboardHeader(title = "Shinymatic",
+                            tags$li(a(href = 'https://github.com/karbartolome/shinymatic',
+                                      icon("power-off"),
+                                      title = "Tests shinymatic"),
+                                    class = "dropdown"),
+                            tags$li(a(href = 'https://github.com/karbartolome/shinymatic',
+                                      img(src = 'https://github.com/karbartolome/shinymatic/raw/main/man/figures/logo.png',
+                                          title = "Home", height = "30px"),
+                                      style = "padding-top:10px; padding-bottom:10px;"),
+                                    class = "dropdown"))
+
 ui <- dashboardPage(
   skin = "black",
-  header = dashboardHeader(title = '{shinymatic}'),
+  header = dbHeader,
   sidebar = dashboardSidebar(sidebarMenu(
     menuItem(
       "Tidymodels inferences",
@@ -107,11 +118,15 @@ ui <- dashboardPage(
   )
 )
 
-
 server <- function(input, output) {
   
-  output$data_test <- renderTable ({
-    autooutput_df(.df=datos, .inputs=input, .dates_as_str=TRUE)
+  data_test <- reactive({
+    autooutput_df(.df=datos, .inputs=input)
+  })
+  
+  output$data_test <- render_gt ({
+    gt(data_test()) %>% 
+      tab_header('Inputs selected')
   })
   
   output$box_inferencia_prob <- renderValueBox({
@@ -142,3 +157,4 @@ server <- function(input, output) {
 }
 
 shinyApp(ui = ui, server = server)
+
